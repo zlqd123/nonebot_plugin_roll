@@ -39,7 +39,7 @@ __plugin_meta__ = PluginMetadata(
 # 匹配以 r 开头但格式无效的输入（如 rx, r3, r 2d6 等）
 # priority 数值越小优先级越高
 ignore_invalid = on_regex(
-    r"^\.?r(?:[^d\d\s]|\s+\d*d?\d*|$)",
+    r"^[。/!！.]?r(?:[^d\d\s]|\s+\d*d?\d*|$)",
     priority=5
 )
 
@@ -50,10 +50,36 @@ async def handle_ignore():
     return
 
 
+# ==================== 处理器1.5：选项骰 rxdy ====================
+# rxdy 选项1 选项2 ... —— 按选项数量自动执行 1d{N}，点数取模选中一项
+# priority 4：必须抢在 ignore_invalid(5) 之前，否则 "rxdy" 的 x 会被当无效输入吞掉
+rxdy_matcher = on_regex(
+    r"^[。/!！.]?rxdy(?:\s+(.*))?$",
+    flags=re.IGNORECASE,
+    priority=4,
+)
+
+
+@rxdy_matcher.handle()
+async def handle_rxdy(matcher: Matcher, event: Event):
+    """选项骰：选项数量决定骰面数"""
+    raw_msg = event.get_plaintext().strip()
+    match = re.match(r"^[。/!！.]?rxdy(?:\s+(.*))?$", raw_msg, re.IGNORECASE)
+    options = extract_options(match.group(1) if match else "")
+
+    if len(options) < 2:
+        await matcher.finish("用法：rxdy 选项1 选项2 …\n按选项数量自动掷 1d{N} 帮你选一个")
+
+    dice_num, dice_side = 1, len(options)
+    results, total = roll_dice(dice_num, dice_side)
+    selected = options[(total - 1) % len(options)]
+    await matcher.finish(f"掷出了1d{len(options)}, 点数为【{total}】\n{selected}")
+
+
 # ==================== 处理器2：紧凑有效格式 ====================
 # 匹配：rd2, r2d6, .rd2, .r2d6 等（无空格）
 roll_compact = on_regex(
-    r"^\.?r(?:d\d+|(?:\d+d\d+))(?:\s+.*)?$",
+    r"^[。/!！.]?r(?:d\d+|(?:\d+d\d+))(?:\s+.*)?$",
     priority=8
 )
 
@@ -135,7 +161,7 @@ async def handle_compact(matcher: Matcher, event: Event):
     
     # 提取骰子表达式和选项
     match = re.match(
-        r"^\.?r(?:d(\d+)|(\d+)d(\d+))(?:\s+(.*))?$",
+        r"^[。/!！.]?r(?:d(\d+)|(\d+)d(\d+))(?:\s+(.*))?$",
         raw_msg,
         re.IGNORECASE
     )
@@ -190,7 +216,7 @@ async def handle_compact(matcher: Matcher, event: Event):
 
 # ==================== 处理器3：带空格格式 ====================
 roll_spaced = on_regex(
-    r"^(?:rd|roll|掷骰)\s+(\S+)(?:\s+(.*))?$",
+    r"^[。/!！.]?(?:rd|roll|掷骰)\s+(\S+)(?:\s+(.*))?$",
     priority=10
 )
 
@@ -201,7 +227,7 @@ async def handle_spaced(matcher: Matcher, event: Event):
     raw_msg = event.get_plaintext().strip()
     
     match = re.match(
-        r"^(?:rd|roll|掷骰)\s+(\S+)(?:\s+(.*))?$",
+        r"^[。/!！.]?(?:rd|roll|掷骰)\s+(\S+)(?:\s+(.*))?$",
         raw_msg,
         re.IGNORECASE
     )
